@@ -49,6 +49,17 @@
         <!-- 评委/演讲者登录界面 -->
         <div id="userLoginSection" class="section" style="display: none;">
             <h2 id="userLoginTitle">用户登录</h2>
+            
+            <!-- 状态提示信息 -->
+            <div id="loginStatusInfo" class="status-info" style="margin-bottom: 20px; padding: 15px; border-radius: 8px; background: #f8f9fa; border-left: 4px solid #007bff;">
+                <div id="scoringStatusText" style="font-weight: bold; margin-bottom: 8px;">
+                    📋 评分状态：<span id="scoringStatus">准备中</span>
+                </div>
+                <div id="loginInstructions" style="color: #666; font-size: 14px;">
+                    请等待管理员开始评分后再登录
+                </div>
+            </div>
+            
             <div class="login-form">
                 <input type="text" id="userNameInput" placeholder="输入您的姓名">
                 <input type="hidden" id="userTypeInput">

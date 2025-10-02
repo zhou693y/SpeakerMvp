@@ -719,21 +719,34 @@ class SpeechScoringSystem {
             // 首先尝试从Firebase加载会话数据
             await this.loadSessionFromFirebase(username, userType);
             
+            // 检查评分是否已开始
+            if (!this.scoringStarted) {
+                alert('评分尚未开始，请等待管理员开启评分后再登录');
+                return;
+            }
+            
             // 验证用户是否存在且角色匹配
             const user = this.users.find(u => u.name === username);
             if (!user) {
-                alert('用户不存在，请联系管理员添加');
+                alert('您不在参与人员名单中，请联系管理员确认');
                 return;
             }
 
-            if (userType === 'judge' && user.role !== 'judge') {
-                alert('您不是评委，无法以评委身份登录');
-                return;
+            // 检查用户是否被分配了对应的角色
+            if (userType === 'judge') {
+                const isAssignedJudge = this.judges.find(judge => judge.name === username);
+                if (!isAssignedJudge) {
+                    alert('您未被指派为评委，无法以评委身份登录');
+                    return;
+                }
             }
 
-            if (userType === 'speaker' && user.role !== 'speaker') {
-                alert('您不是演讲者，无法以演讲者身份登录');
-                return;
+            if (userType === 'speaker') {
+                const isAssignedSpeaker = this.speakers.find(speaker => speaker.name === username);
+                if (!isAssignedSpeaker) {
+                    alert('您未被指派为演讲者，无法以演讲者身份登录');
+                    return;
+                }
             }
 
             this.currentUser = { name: username, type: userType };
@@ -904,6 +917,33 @@ class SpeechScoringSystem {
             section.style.display = 'none';
         });
         document.getElementById(sectionId).style.display = 'block';
+        
+        // 如果显示用户登录界面，更新状态信息
+        if (sectionId === 'userLoginSection') {
+            this.updateLoginStatusDisplay();
+        }
+    }
+
+    updateLoginStatusDisplay() {
+        const scoringStatusElement = document.getElementById('scoringStatus');
+        const loginInstructionsElement = document.getElementById('loginInstructions');
+        const loginStatusInfo = document.getElementById('loginStatusInfo');
+        
+        if (!scoringStatusElement || !loginInstructionsElement || !loginStatusInfo) return;
+        
+        if (this.scoringStarted) {
+            scoringStatusElement.textContent = '进行中';
+            scoringStatusElement.style.color = '#28a745';
+            loginInstructionsElement.textContent = '只有已分配角色的人员可以登录';
+            loginStatusInfo.style.borderLeftColor = '#28a745';
+            loginStatusInfo.style.background = '#f8fff9';
+        } else {
+            scoringStatusElement.textContent = '准备中';
+            scoringStatusElement.style.color = '#ffc107';
+            loginInstructionsElement.textContent = '请等待管理员开始评分后再登录';
+            loginStatusInfo.style.borderLeftColor = '#ffc107';
+            loginStatusInfo.style.background = '#fffdf5';
+        }
     }
 
     // 管理员功能实现
@@ -1425,7 +1465,10 @@ class SpeechScoringSystem {
         this.initializeScores();
         this.saveToLocalStorage();
 
-        alert(`评分开始！共有 ${this.speakers.length} 位演讲者，${this.judges.length} 位评委`);
+        // 同步评分开始状态到Firebase
+        this.syncCurrentSessionToFirebase();
+
+        alert(`评分开始！共有 ${this.speakers.length} 位演讲者，${this.judges.length} 位评委\n\n现在已分配的人员可以登录系统进行评分了！`);
         this.updateAdminInterface();
     }
 
