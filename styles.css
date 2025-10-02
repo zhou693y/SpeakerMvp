@@ -1086,6 +1086,41 @@ h1 {
     100% { opacity: 1; }
 }
 
+/* 调试信息样式 */
+.debug-info {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.debug-info h4 {
+    margin: 0 0 10px 0;
+    color: #495057;
+    font-size: 14px;
+}
+
+.debug-content {
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: #ffffff;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.debug-content div {
+    margin-bottom: 2px;
+    word-wrap: break-word;
+}
+
 /* 历
 史记录模态框样式 */
 .history-modal {
