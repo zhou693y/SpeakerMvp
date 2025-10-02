@@ -1066,86 +1066,199 @@ class SpeechScoringSystem {
         loginBtn.textContent = '正在验证...';
         loginBtn.disabled = true;
 
+        // 移动设备检测
+        const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
         try {
-            // 步骤1: 确保Firebase连接
-            console.log('📡 检查Firebase连接状态...');
-            this.showDebugInfo('📡 检查Firebase连接状态...');
-            await this.ensureFirebaseConnection();
-            this.showDebugInfo('✅ Firebase连接正常');
+            // 步骤1: 智能连接检查
+            console.log('📡 智能检查Firebase连接状态...');
+            this.showDebugInfo('📡 智能检查Firebase连接状态...');
             
-            // 步骤2: 从Firebase验证用户身份
-            console.log('🔍 从Firebase验证用户身份...');
-            this.showDebugInfo('🔍 从Firebase验证用户身份...');
-            const userValidation = await this.validateUserFromFirebase(username, userType);
-            
-            if (!userValidation.success) {
-                console.log('❌ Firebase验证失败:', userValidation.reason);
-                this.showDebugInfo(`❌ Firebase验证失败: ${userValidation.reason}`);
+            const connectionResult = await this.smartFirebaseConnection();
+            if (!connectionResult.success) {
+                this.showDebugInfo(`⚠️ Firebase连接问题: ${connectionResult.message}`);
                 
-                // 尝试本地验证作为备用
-                console.log('🔄 尝试本地验证...');
-                this.showDebugInfo('🔄 尝试本地验证...');
-                const localValidation = this.validateUserLocally(username, userType);
-                
-                if (!localValidation.success) {
-                    this.showDebugInfo(`❌ 本地验证也失败: ${localValidation.message}`);
-                    alert(userValidation.message || localValidation.message);
-                    return;
+                // 移动设备直接尝试本地验证
+                if (isMobile) {
+                    console.log('📱 移动设备直接尝试本地验证...');
+                    this.showDebugInfo('📱 移动设备直接尝试本地验证...');
+                    const localValidation = this.validateUserLocally(username, userType);
+                    
+                    if (localValidation.success) {
+                        await this.completeLogin(username, userType, 'local');
+                        return;
+                    }
                 }
                 
-                console.log('✅ 本地验证成功，继续登录流程');
-                this.showDebugInfo('✅ 本地验证成功，继续登录流程');
+                throw new Error(connectionResult.message);
+            }
+            
+            this.showDebugInfo('✅ Firebase连接正常');
+            
+            // 步骤2: 智能用户验证
+            console.log('🔍 智能验证用户身份...');
+            this.showDebugInfo('🔍 智能验证用户身份...');
+            
+            const validationResult = await this.smartUserValidation(username, userType);
+            
+            if (!validationResult.success) {
+                // 显示具体的错误信息
+                const errorMessage = this.getLocalizedErrorMessage(validationResult.reason, userType);
+                this.showDebugInfo(`❌ 验证失败: ${validationResult.reason}`);
+                alert(errorMessage);
+                return;
+            }
+            
+            console.log('✅ 用户验证成功');
+            this.showDebugInfo('✅ 用户验证成功');
+            
+            // 步骤3: 完成登录
+            await this.completeLogin(username, userType, 'firebase');
+            
+        } catch (error) {
+            console.error('💥 登录过程中发生错误:', error);
+            this.showDebugInfo(`💥 登录错误: ${error.message}`);
+            
+            // 移动设备友好的错误处理
+            if (isMobile) {
+                const mobileErrorMessage = this.getMobileErrorMessage(error);
+                alert(mobileErrorMessage);
             } else {
-                console.log('✅ Firebase验证成功');
-                this.showDebugInfo('✅ Firebase验证成功');
+                alert('登录失败，请检查网络连接后重试。\n如果问题持续存在，请联系技术支持。');
             }
+        } finally {
+            // 恢复按钮状态
+            loginBtn.textContent = originalText;
+            loginBtn.disabled = false;
+        }
+    }
 
-            // 步骤3: 设置用户会话
-            this.currentUser = { name: username, type: userType };
-            this.updateUserInfo();
-            this.showDebugInfo(`👤 设置用户会话: ${userType}`);
+    // 智能Firebase连接检查
+    async smartFirebaseConnection() {
+        try {
+            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const timeout = isMobile ? 5000 : 3000;
+            
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('连接超时')), timeout);
+            });
+            
+            const connectionPromise = this.ensureFirebaseConnection();
+            
+            await Promise.race([connectionPromise, timeoutPromise]);
+            return { success: true };
+            
+        } catch (error) {
+            return { 
+                success: false, 
+                message: error.message === '连接超时' ? '网络连接较慢' : '网络连接失败'
+            };
+        }
+    }
 
-            // 步骤4: 跳转到对应界面
-            switch (userType) {
-                case 'judge':
-                    this.showSection('judgeSection');
-                    this.updateJudgeInterface();
-                    console.log('👨‍⚖️ 评委界面已加载');
-                    this.showDebugInfo('👨‍⚖️ 评委界面已加载');
-                    break;
-                case 'speaker':
-                    this.showSection('speakerSection');
-                    this.updateSpeakerInterface();
-                    console.log('🎤 演讲者界面已加载');
-                    this.showDebugInfo('🎤 演讲者界面已加载');
-                    break;
+    // 智能用户验证
+    async smartUserValidation(username, userType) {
+        try {
+            // 首先尝试Firebase验证
+            const firebaseResult = await this.validateUserFromFirebase(username, userType);
+            
+            if (firebaseResult.success) {
+                return firebaseResult;
             }
+            
+            // Firebase失败时，尝试本地验证
+            if (firebaseResult.reason === 'timeout' || firebaseResult.reason === 'firebase_error') {
+                console.log('🔄 Firebase验证失败，尝试本地验证...');
+                const localResult = this.validateUserLocally(username, userType);
+                
+                if (localResult.success) {
+                    return { ...localResult, source: 'local' };
+                }
+            }
+            
+            return firebaseResult;
+            
+        } catch (error) {
+            return {
+                success: false,
+                reason: 'validation_error',
+                message: '验证过程出现错误'
+            };
+        }
+    }
 
-            // 步骤5: 保存会话并设置监听器
-            this.saveToLocalStorage();
+    // 完成登录流程
+    async completeLogin(username, userType, source) {
+        // 设置用户会话
+        this.currentUser = { name: username, type: userType };
+        this.updateUserInfo();
+        this.showDebugInfo(`👤 设置用户会话: ${userType} (${source})`);
+
+        // 跳转到对应界面
+        switch (userType) {
+            case 'judge':
+                this.showSection('judgeSection');
+                this.updateJudgeInterface();
+                console.log('👨‍⚖️ 评委界面已加载');
+                this.showDebugInfo('👨‍⚖️ 评委界面已加载');
+                break;
+            case 'speaker':
+                this.showSection('speakerSection');
+                this.updateSpeakerInterface();
+                console.log('🎤 演讲者界面已加载');
+                this.showDebugInfo('🎤 演讲者界面已加载');
+                break;
+        }
+
+        // 保存会话并设置监听器
+        if (source === 'firebase') {
+            // 保存用户会话到云端
+            await this.saveUserSessionToFirebase();
             
             // 确保实时监听器已设置
             if (this.sessionId && this.firebaseDocId) {
                 this.setupRealtimeListeners();
                 this.showDebugInfo('🔄 实时监听器已设置');
             }
-            
-            console.log('🎉 用户登录成功:', { 
-                sessionId: this.sessionId, 
-                firebaseDocId: this.firebaseDocId,
-                hasRealtimeListeners: !!this.sessionListener
-            });
-            this.showDebugInfo('🎉 登录成功！');
-            
-        } catch (error) {
-            console.error('💥 登录过程中发生错误:', error);
-            this.showDebugInfo(`💥 登录错误: ${error.message}`);
-            alert('登录失败，请检查网络连接后重试。\n如果问题持续存在，请联系技术支持。');
-        } finally {
-            // 恢复按钮状态
-            loginBtn.textContent = originalText;
-            loginBtn.disabled = false;
+        } else {
+            this.saveToLocalStorage();
+            this.showDebugInfo('💾 本地会话已保存');
         }
+        
+        console.log('🎉 用户登录成功:', { 
+            sessionId: this.sessionId, 
+            firebaseDocId: this.firebaseDocId,
+            source: source,
+            hasRealtimeListeners: !!this.sessionListener
+        });
+        this.showDebugInfo('🎉 登录成功！');
+    }
+
+    // 获取本地化错误信息
+    getLocalizedErrorMessage(reason, userType) {
+        const userTypeText = userType === 'judge' ? '评委' : '演讲者';
+        
+        switch (reason) {
+            case 'no_sessions':
+                return '系统中暂无活跃会话，请联系管理员确认评分是否已开始。';
+            case 'user_not_found':
+                return `未找到您的${userTypeText}身份信息。\n请确认：\n1. 您的姓名输入正确\n2. 管理员已将您添加到系统\n3. 您已被分配正确的角色\n4. 评分已经开始`;
+            case 'timeout':
+                return '网络连接较慢，请稍后重试或联系技术支持。';
+            case 'firebase_error':
+                return '服务器连接失败，请检查网络连接后重试。';
+            default:
+                return '登录失败，请重试或联系技术支持。';
+        }
+    }
+
+    // 获取移动设备友好的错误信息
+    getMobileErrorMessage(error) {
+        if (error.message.includes('网络') || error.message.includes('连接')) {
+            return '网络连接不稳定，请：\n1. 检查网络连接\n2. 尝试刷新页面\n3. 切换到更稳定的网络';
+        }
+        
+        return '登录遇到问题，请：\n1. 刷新页面重试\n2. 检查网络连接\n3. 联系技术支持';
     }
 
     // 显示调试信息
@@ -1198,61 +1311,103 @@ class SpeechScoringSystem {
         }
     }
 
-    // 从Firebase验证用户身份
+    // 从Firebase验证用户身份（优化版）
     async validateUserFromFirebase(username, userType) {
         try {
             console.log('🔍 在Firebase中查找用户会话...');
             
-            const sessionsSnapshot = await db.collection('sessions').get();
+            // 移动设备快速验证模式
+            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const timeout = isMobile ? 10000 : 8000; // 移动设备更长超时
             
-            if (sessionsSnapshot.empty) {
-                return {
-                    success: false,
-                    reason: 'no_sessions',
-                    message: '系统中暂无活跃会话，请联系管理员确认评分是否已开始。'
-                };
-            }
-
-            // 查找用户所在的会话
-            for (const sessionDoc of sessionsSnapshot.docs) {
-                const sessionData = sessionDoc.data();
-                
-                // 检查评分状态
-                if (sessionData.status !== 'scoring') {
-                    continue; // 跳过未开始评分的会话
-                }
-                
-                // 检查用户是否在此会话中
-                const userFound = await this.checkUserInSession(sessionDoc, username, userType);
-                
-                if (userFound) {
-                    console.log('✅ 在Firebase中找到用户:', { sessionId: sessionData.sessionId, userType });
-                    
-                    // 加载完整会话数据
-                    await this.loadCompleteSessionData(sessionDoc, sessionData);
-                    
-                    return {
-                        success: true,
-                        sessionId: sessionData.sessionId,
-                        firebaseDocId: sessionDoc.id
-                    };
-                }
-            }
+            // 创建超时Promise
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('验证超时')), timeout);
+            });
             
-            return {
-                success: false,
-                reason: 'user_not_found',
-                message: `未找到您的${userType === 'judge' ? '评委' : '演讲者'}身份信息。\n请确认：\n1. 您的姓名输入正确\n2. 管理员已将您添加到系统\n3. 您已被分配正确的角色\n4. 评分已经开始`
-            };
+            // 验证逻辑Promise
+            const validatePromise = this.performFirebaseValidation(username, userType);
+            
+            // 竞速执行
+            const result = await Promise.race([validatePromise, timeoutPromise]);
+            return result;
             
         } catch (error) {
             console.error('❌ Firebase验证过程中出错:', error);
+            
+            // 如果是超时错误，提供更友好的提示
+            if (error.message === '验证超时') {
+                return {
+                    success: false,
+                    reason: 'timeout',
+                    message: '网络连接较慢，正在尝试离线验证...'
+                };
+            }
+            
             return {
                 success: false,
                 reason: 'firebase_error',
                 message: '网络连接不稳定，正在尝试其他验证方式...'
             };
         }
+    }
+
+    // 执行Firebase验证的核心逻辑
+    async performFirebaseValidation(username, userType) {
+        // 优化：限制查询数量，只获取最近的活跃会话
+        const sessionsSnapshot = await db.collection('sessions')
+            .where('status', '==', 'scoring')
+            .orderBy('timestamp', 'desc')
+            .limit(5) // 只查询最近5个会话
+            .get();
+        
+        if (sessionsSnapshot.empty) {
+            return {
+                success: false,
+                reason: 'no_sessions',
+                message: '系统中暂无活跃会话，请联系管理员确认评分是否已开始。'
+            };
+        }
+
+        // 并行检查所有会话（而不是串行）
+        const checkPromises = sessionsSnapshot.docs.map(async (sessionDoc) => {
+            const sessionData = sessionDoc.data();
+            const userFound = await this.checkUserInSession(sessionDoc, username, userType);
+            
+            if (userFound) {
+                return {
+                    found: true,
+                    sessionDoc,
+                    sessionData
+                };
+            }
+            return { found: false };
+        });
+
+        const results = await Promise.all(checkPromises);
+        const foundResult = results.find(result => result.found);
+
+        if (foundResult) {
+            console.log('✅ 在Firebase中找到用户:', { 
+                sessionId: foundResult.sessionData.sessionId, 
+                userType 
+            });
+            
+            // 加载完整会话数据
+            await this.loadCompleteSessionData(foundResult.sessionDoc, foundResult.sessionData);
+            
+            return {
+                success: true,
+                sessionId: foundResult.sessionData.sessionId,
+                firebaseDocId: foundResult.sessionDoc.id
+            };
+        }
+        
+        return {
+            success: false,
+            reason: 'user_not_found',
+            message: `未找到您的${userType === 'judge' ? '评委' : '演讲者'}身份信息。\n请确认：\n1. 您的姓名输入正确\n2. 管理员已将您添加到系统\n3. 您已被分配正确的角色\n4. 评分已经开始`
+        };
     }
 
     // 本地验证用户身份（备用方案）
@@ -1473,6 +1628,9 @@ class SpeechScoringSystem {
     handleLogout() {
         // 清理Firebase监听器
         this.cleanupListeners();
+        
+        // 清理跨设备同步监听器
+        this.cleanupCrossDeviceSync();
         
         this.currentUser = null;
         this.updateUserInfo();
@@ -3028,6 +3186,172 @@ class SpeechScoringSystem {
         };
         localStorage.setItem('speechScoringSystem', JSON.stringify(data));
         console.log('数据已保存到本地存储');
+    }
+
+    // 保存用户会话到Firebase云端
+    async saveUserSessionToFirebase() {
+        if (!this.db || !this.currentUser) {
+            console.log('⚠️ Firebase未连接或用户未登录，跳过云端保存');
+            return;
+        }
+
+        try {
+            const sessionData = {
+                currentUser: this.currentUser,
+                sessionId: this.sessionId,
+                firebaseDocId: this.firebaseDocId,
+                deviceInfo: {
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform,
+                    language: navigator.language,
+                    isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                },
+                lastActive: new Date().toISOString(),
+                loginTimestamp: new Date().toISOString()
+            };
+
+            // 使用用户名和类型作为唯一标识符
+            const userSessionRef = this.db.collection('userSessions').doc(`${this.currentUser.name}_${this.currentUser.type}`);
+            
+            await userSessionRef.set(sessionData, { merge: true });
+            
+            console.log('☁️ 用户会话已保存到Firebase云端:', sessionData);
+            this.showDebugInfo('☁️ 会话已同步到云端');
+            
+            // 设置跨设备同步监听
+            this.setupCrossDeviceSync();
+            
+        } catch (error) {
+            console.error('❌ 保存用户会话到Firebase失败:', error);
+            this.showDebugInfo('⚠️ 云端同步失败');
+        }
+    }
+
+    // 从云端恢复用户会话
+    async restoreUserSessionFromFirebase(username, userType) {
+        if (!this.db) {
+            console.log('⚠️ Firebase未连接，无法从云端恢复');
+            return null;
+        }
+
+        try {
+            const userSessionRef = this.db.collection('userSessions').doc(`${username}_${userType}`);
+            const doc = await userSessionRef.get();
+            
+            if (doc.exists) {
+                const sessionData = doc.data();
+                console.log('☁️ 从Firebase云端恢复用户会话:', sessionData);
+                
+                // 检查会话是否过期（24小时）
+                const lastActive = new Date(sessionData.lastActive);
+                const now = new Date();
+                const hoursDiff = (now - lastActive) / (1000 * 60 * 60);
+                
+                if (hoursDiff > 24) {
+                    console.log('⏰ 云端会话已过期，需要重新登录');
+                    return null;
+                }
+                
+                // 恢复会话数据
+                this.currentUser = sessionData.currentUser;
+                this.sessionId = sessionData.sessionId;
+                this.firebaseDocId = sessionData.firebaseDocId;
+                
+                this.showDebugInfo('☁️ 已从云端恢复会话');
+                return sessionData;
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.error('❌ 从Firebase恢复用户会话失败:', error);
+            return null;
+        }
+    }
+
+    // 设置跨设备同步
+    setupCrossDeviceSync() {
+        if (!this.currentUser || !this.db) {
+            return;
+        }
+
+        try {
+            const userSessionRef = this.db.collection('userSessions').doc(`${this.currentUser.name}_${this.currentUser.type}`);
+            
+            // 监听其他设备的会话变化
+            this.crossDeviceListener = userSessionRef.onSnapshot((doc) => {
+                if (doc.exists) {
+                    const remoteSession = doc.data();
+                    const localTimestamp = localStorage.getItem('lastSyncTimestamp');
+                    
+                    // 如果远程会话更新时间比本地新，说明其他设备有更新
+                    if (!localTimestamp || new Date(remoteSession.lastActive) > new Date(localTimestamp)) {
+                        console.log('🔄 检测到其他设备的会话更新');
+                        this.showDebugInfo('🔄 检测到其他设备的更新');
+                        
+                        this.handleCrossDeviceUpdate(remoteSession);
+                    }
+                }
+            });
+            
+            console.log('🔄 跨设备同步监听已设置');
+            
+        } catch (error) {
+            console.error('❌ 设置跨设备同步失败:', error);
+        }
+    }
+
+    // 处理跨设备更新
+    handleCrossDeviceUpdate(remoteSession) {
+        // 更新本地时间戳
+        localStorage.setItem('lastSyncTimestamp', new Date().toISOString());
+        
+        // 检查是否需要同步会话数据
+        if (remoteSession.sessionId && remoteSession.sessionId !== this.sessionId) {
+            console.log('🔄 同步远程会话数据...');
+            this.syncFromRemoteSession(remoteSession);
+        }
+        
+        // 如果当前页面不是活跃状态，静默同步
+        if (document.hidden) {
+            console.log('📱 后台静默同步');
+        } else {
+            // 如果用户正在使用，显示同步提示
+            this.showDebugInfo('💡 已自动同步其他设备的数据');
+        }
+    }
+
+    // 从远程会话同步数据
+    syncFromRemoteSession(remoteSession) {
+        try {
+            // 更新会话数据
+            if (remoteSession.sessionId !== this.sessionId) {
+                this.sessionId = remoteSession.sessionId;
+                this.firebaseDocId = remoteSession.firebaseDocId;
+                
+                // 重新设置监听器
+                this.cleanupListeners();
+                this.setupRealtimeListeners();
+                
+                console.log('🔄 已同步远程会话数据');
+                this.showDebugInfo('🔄 已同步其他设备的数据');
+                
+                // 更新界面
+                this.updateAllInterfaces();
+            }
+            
+        } catch (error) {
+            console.error('❌ 同步远程会话失败:', error);
+        }
+    }
+
+    // 清理跨设备监听器
+    cleanupCrossDeviceSync() {
+        if (this.crossDeviceListener) {
+            this.crossDeviceListener();
+            this.crossDeviceListener = null;
+            console.log('🔄 跨设备同步监听器已清理');
+        }
     }
 
     loadFromLocalStorage() {
