@@ -263,6 +263,62 @@ h1 {
         flex-direction: column;
         gap: 5px;
     }
+
+    /* 移动设备优化 */
+    .container {
+        padding: 10px;
+        margin: 0;
+        max-width: 100%;
+    }
+
+    .section {
+        padding: 15px;
+        margin: 10px 0;
+    }
+
+    /* 触摸友好的按钮 */
+    button, .btn {
+        min-height: 44px;
+        padding: 12px 20px;
+        font-size: 16px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* 输入框优化 */
+    input, select, textarea {
+        min-height: 44px;
+        padding: 12px;
+        font-size: 16px;
+        border-radius: 8px;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+    }
+
+    /* 防止iOS缩放 */
+    input[type="text"], 
+    input[type="password"], 
+    input[type="number"], 
+    select {
+        font-size: 16px !important;
+    }
+
+    /* 表格响应式 */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+        min-width: 100%;
+        font-size: 14px;
+    }
+
+    th, td {
+        padding: 8px 4px;
+        white-space: nowrap;
+    }
 }
 
 /* 登录选择界
@@ -1004,6 +1060,7 @@ h1 {
     font-size: 12px;
     color: white;
     z-index: 1000;
+    transition: all 0.3s ease;
 }
 
 .db-status.connected {
@@ -1012,10 +1069,21 @@ h1 {
 
 .db-status.connecting {
     background: #4299e1;
+    animation: pulse 1.5s infinite;
+}
+
+.db-status.offline {
+    background: #f56565;
 }
 
 .db-status.error {
     background: #f56565;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
 }
 
 /* 历

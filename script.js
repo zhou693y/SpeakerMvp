@@ -77,11 +77,230 @@ class SpeechScoringSystem {
 
     async initFirebase() {
         try {
+            // 检查网络连接
+            if (!navigator.onLine) {
+                console.warn('设备离线，无法连接Firebase');
+                this.updateFirebaseStatus('offline');
+                return;
+            }
+
+            // 检测移动设备
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.log('检测到移动设备，优化Firebase连接...');
+            }
+
             await initializeFirebase();
             this.updateFirebaseStatus('connected');
+            
+            // 初始化实时监听器
+            this.setupRealtimeListeners();
+            
+            // 添加网络状态监听
+            this.setupNetworkListeners();
+            
         } catch (error) {
             console.error('Firebase连接失败:', error);
             this.updateFirebaseStatus('error');
+            
+            // 移动设备特殊处理
+            if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                console.log('iOS设备检测到连接问题，尝试重新连接...');
+                setTimeout(() => this.initFirebase(), 2000);
+            }
+        }
+    }
+
+    // 设置网络状态监听器
+    setupNetworkListeners() {
+        if (this.networkListenersSetup) return;
+        this.networkListenersSetup = true;
+
+        window.addEventListener('online', () => {
+            console.log('网络已连接，重新初始化Firebase');
+            this.updateFirebaseStatus('reconnecting');
+            setTimeout(() => this.initFirebase(), 1000);
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('网络已断开');
+            this.updateFirebaseStatus('offline');
+        });
+    }
+
+    // 设置Firebase实时监听器
+    setupRealtimeListeners() {
+        if (!firebaseInitialized || !db) return;
+
+        try {
+            const sessionDocId = this.generateSessionDocId();
+            const sessionRef = db.collection('sessions').doc(sessionDocId);
+
+            // 监听主会话文档变化
+            this.sessionListener = sessionRef.onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    console.log('检测到会话数据变化:', data);
+                    
+                    // 更新本地状态
+                    if (data.scoringMethod && data.scoringMethod !== this.scoringMethod) {
+                        this.scoringMethod = data.scoringMethod;
+                        this.updateSettingsDisplay();
+                    }
+                    
+                    if (data.status === 'scoring' && !this.scoringStarted) {
+                        this.scoringStarted = true;
+                        this.updateAllInterfaces();
+                    }
+                }
+            }, (error) => {
+                console.error('会话监听器错误:', error);
+            });
+
+            // 监听评委变化
+            this.judgesListener = sessionRef.collection('judges').onSnapshot((snapshot) => {
+                console.log('检测到评委数据变化');
+                const firebaseJudges = [];
+                snapshot.forEach((doc) => {
+                    const judgeData = doc.data();
+                    firebaseJudges.push({
+                        id: judgeData.judgeId,
+                        name: judgeData.name,
+                        role: judgeData.role || 'judge'
+                    });
+                });
+                
+                // 更新本地评委列表（避免重复）
+                this.mergeJudges(firebaseJudges);
+                this.updateRoleLists();
+            }, (error) => {
+                console.error('评委监听器错误:', error);
+            });
+
+            // 监听演讲者变化
+            this.speakersListener = sessionRef.collection('speakers').onSnapshot((snapshot) => {
+                console.log('检测到演讲者数据变化');
+                const firebaseSpeakers = [];
+                snapshot.forEach((doc) => {
+                    const speakerData = doc.data();
+                    firebaseSpeakers.push({
+                        id: speakerData.speakerId,
+                        name: speakerData.name,
+                        role: speakerData.role || 'speaker'
+                    });
+                });
+                
+                // 更新本地演讲者列表
+                this.mergeSpeakers(firebaseSpeakers);
+                this.updateRoleLists();
+            }, (error) => {
+                console.error('演讲者监听器错误:', error);
+            });
+
+            // 监听评分变化
+            this.scoresListener = sessionRef.collection('speakers').onSnapshot((snapshot) => {
+                console.log('检测到评分数据变化');
+                snapshot.forEach((speakerDoc) => {
+                    const speakerId = speakerDoc.data().speakerId;
+                    
+                    // 监听每个演讲者的评分
+                    speakerDoc.ref.collection('ratings').onSnapshot((ratingsSnapshot) => {
+                        const speakerScores = {};
+                        ratingsSnapshot.forEach((ratingDoc) => {
+                            const rating = ratingDoc.data();
+                            speakerScores[rating.judgeId] = rating.score;
+                        });
+                        
+                        // 更新本地评分数据
+                        if (Object.keys(speakerScores).length > 0) {
+                            this.scores[speakerId] = speakerScores;
+                            this.updateScoreDisplays();
+                        }
+                    });
+                });
+            }, (error) => {
+                console.error('评分监听器错误:', error);
+            });
+
+            console.log('Firebase实时监听器已设置');
+        } catch (error) {
+            console.error('设置实时监听器失败:', error);
+        }
+    }
+
+    // 合并评委数据（避免重复）
+    mergeJudges(firebaseJudges) {
+        firebaseJudges.forEach(fbJudge => {
+            const existingJudge = this.judges.find(j => j.id === fbJudge.id);
+            if (!existingJudge) {
+                this.judges.push(fbJudge);
+                // 同时添加到用户列表
+                const existingUser = this.users.find(u => u.name === fbJudge.name);
+                if (!existingUser) {
+                    this.users.push(fbJudge);
+                }
+            }
+        });
+    }
+
+    // 合并演讲者数据（避免重复）
+    mergeSpeakers(firebaseSpeakers) {
+        firebaseSpeakers.forEach(fbSpeaker => {
+            const existingSpeaker = this.speakers.find(s => s.id === fbSpeaker.id);
+            if (!existingSpeaker) {
+                this.speakers.push(fbSpeaker);
+                // 同时添加到用户列表
+                const existingUser = this.users.find(u => u.name === fbSpeaker.name);
+                if (!existingUser) {
+                    this.users.push(fbSpeaker);
+                }
+            }
+        });
+    }
+
+    // 更新所有界面
+    updateAllInterfaces() {
+        this.updateAdminInterface();
+        this.updateJudgeInterface();
+        this.updateSpeakerInterface();
+        this.updateLoginStatusDisplay();
+    }
+
+    // 更新评分显示
+    updateScoreDisplays() {
+        // 更新管理员界面的评分显示
+        if (this.currentUser && this.currentUser.role === 'admin') {
+            this.updateAdminInterface();
+        }
+        
+        // 更新评委界面的评分显示
+        if (this.currentUser && this.currentUser.role === 'judge') {
+            this.updateJudgeInterface();
+        }
+        
+        // 更新演讲者界面的评分显示
+        if (this.currentUser && this.currentUser.role === 'speaker') {
+            this.updateSpeakerInterface();
+        }
+    }
+
+    // 清理监听器
+    cleanupListeners() {
+        if (this.sessionListener) {
+            this.sessionListener();
+            this.sessionListener = null;
+        }
+        if (this.judgesListener) {
+            this.judgesListener();
+            this.judgesListener = null;
+        }
+        if (this.speakersListener) {
+            this.speakersListener();
+            this.speakersListener = null;
+        }
+        if (this.scoresListener) {
+            this.scoresListener();
+            this.scoresListener = null;
         }
     }
 
@@ -102,6 +321,14 @@ class SpeechScoringSystem {
             case 'connecting':
                 statusElement.textContent = '🟡 连接中...';
                 statusElement.className = 'db-status connecting';
+                break;
+            case 'reconnecting':
+                statusElement.textContent = '🟡 重新连接中...';
+                statusElement.className = 'db-status connecting';
+                break;
+            case 'offline':
+                statusElement.textContent = '🔴 设备离线';
+                statusElement.className = 'db-status offline';
                 break;
             case 'error':
                 statusElement.textContent = '🔴 Firebase连接失败';
@@ -717,7 +944,13 @@ class SpeechScoringSystem {
 
         try {
             // 首先尝试从Firebase加载会话数据
-            await this.loadSessionFromFirebase(username, userType);
+            const sessionLoaded = await this.loadSessionFromFirebase(username, userType);
+            
+            if (!sessionLoaded) {
+                // 如果Firebase加载失败，尝试使用本地数据
+                console.log('Firebase加载失败，尝试使用本地数据');
+                this.loadFromLocalStorage();
+            }
             
             // 检查评分是否已开始
             if (!this.scoringStarted) {
@@ -728,7 +961,7 @@ class SpeechScoringSystem {
             // 验证用户是否存在且角色匹配
             const user = this.users.find(u => u.name === username);
             if (!user) {
-                alert('您不在参与人员名单中，请联系管理员确认');
+                alert('您不在参与人员名单中，请联系管理员确认。\n如果您确定已被添加，请检查网络连接或联系技术支持。');
                 return;
             }
 
@@ -764,7 +997,10 @@ class SpeechScoringSystem {
             }
 
             this.saveToLocalStorage();
-            console.log('用户登录成功');
+            console.log('用户登录成功，会话已同步:', { 
+                sessionId: this.sessionId, 
+                firebaseConnected: sessionLoaded 
+            });
         } catch (error) {
             console.error('登录失败:', error);
             alert('登录失败，请稍后重试');
@@ -778,43 +1014,51 @@ class SpeechScoringSystem {
     // 新增：从Firebase加载会话数据
     async loadSessionFromFirebase(username, userType) {
         if (!firebaseInitialized || !db) {
-            console.log('Firebase未初始化，使用本地数据');
-            return;
+            console.log('Firebase未初始化，尝试重新初始化...');
+            await this.initFirebase();
+            if (!firebaseInitialized || !db) {
+                console.log('Firebase初始化失败，使用本地数据');
+                return false;
+            }
         }
 
         try {
-            console.log('正在从Firebase加载会话数据...');
+            console.log('正在从Firebase加载会话数据...', { username, userType });
             
-            // 查找包含该用户的会话
+            // 首先尝试查找最新的活跃会话
             const sessionsRef = db.collection('sessions');
-            const snapshot = await sessionsRef.get();
+            const snapshot = await sessionsRef
+                .where('status', '==', 'scoring')
+                .orderBy('createdAt', 'desc')
+                .limit(10)
+                .get();
             
             let foundSession = null;
             let sessionData = null;
 
-            for (const doc of snapshot.docs) {
-                const data = doc.data();
+            // 如果没有找到活跃会话，查找所有会话
+            if (snapshot.empty) {
+                console.log('未找到活跃会话，查找所有会话...');
+                const allSnapshot = await sessionsRef
+                    .orderBy('createdAt', 'desc')
+                    .limit(20)
+                    .get();
                 
-                // 检查judges集合
-                if (userType === 'judge') {
-                    const judgesSnapshot = await doc.ref.collection('judges').get();
-                    const judgeFound = judgesSnapshot.docs.some(judgeDoc => 
-                        judgeDoc.data().name === username
-                    );
-                    if (judgeFound) {
+                for (const doc of allSnapshot.docs) {
+                    const data = doc.data();
+                    const userFound = await this.checkUserInSession(doc, username, userType);
+                    if (userFound) {
                         foundSession = doc;
                         sessionData = data;
                         break;
                     }
                 }
-                
-                // 检查speakers集合
-                if (userType === 'speaker') {
-                    const speakersSnapshot = await doc.ref.collection('speakers').get();
-                    const speakerFound = speakersSnapshot.docs.some(speakerDoc => 
-                        speakerDoc.data().name === username
-                    );
-                    if (speakerFound) {
+            } else {
+                // 在活跃会话中查找用户
+                for (const doc of snapshot.docs) {
+                    const data = doc.data();
+                    const userFound = await this.checkUserInSession(doc, username, userType);
+                    if (userFound) {
                         foundSession = doc;
                         sessionData = data;
                         break;
@@ -823,61 +1067,120 @@ class SpeechScoringSystem {
             }
 
             if (foundSession && sessionData) {
-                console.log('找到用户会话，正在加载数据...');
+                console.log('找到用户会话，正在加载数据...', sessionData.sessionId);
                 
-                // 更新会话ID
+                // 更新会话ID和Firebase文档ID
                 this.sessionId = sessionData.sessionId;
+                this.firebaseDocId = foundSession.id;
                 
-                // 加载judges数据
-                const judgesSnapshot = await foundSession.ref.collection('judges').get();
-                const judges = [];
-                judgesSnapshot.forEach(doc => {
-                    const judgeData = doc.data();
-                    judges.push({
-                        id: judgeData.judgeId,
-                        name: judgeData.name,
-                        role: judgeData.role
-                    });
-                });
+                // 加载完整会话数据
+                await this.loadCompleteSessionData(foundSession, sessionData);
                 
-                // 加载speakers数据
-                const speakersSnapshot = await foundSession.ref.collection('speakers').get();
-                const speakers = [];
-                speakersSnapshot.forEach(doc => {
-                    const speakerData = doc.data();
-                    speakers.push({
-                        id: speakerData.speakerId,
-                        name: speakerData.name,
-                        role: speakerData.role
-                    });
-                });
-                
-                // 更新本地数据
-                this.judges = judges;
-                this.speakers = speakers;
-                this.users = [...judges, ...speakers];
-                this.scoringMethod = sessionData.scoringMethod || 'trimmed';
-                this.scoringStarted = sessionData.status === 'scoring';
-                
-                // 更新界面
-                this.updateSessionDisplay();
-                this.updateAdminInterface();
+                // 设置实时监听器
+                this.setupRealtimeListeners();
                 
                 console.log('会话数据加载完成:', {
                     sessionId: this.sessionId,
-                    judges: judges.length,
-                    speakers: speakers.length,
+                    firebaseDocId: this.firebaseDocId,
+                    judges: this.judges.length,
+                    speakers: this.speakers.length,
                     scoringStarted: this.scoringStarted
                 });
+                
+                return true;
             } else {
                 console.log('未找到用户对应的会话');
+                return false;
             }
         } catch (error) {
             console.error('从Firebase加载会话数据失败:', error);
+            return false;
+        }
+    }
+
+    // 检查用户是否在指定会话中
+    async checkUserInSession(sessionDoc, username, userType) {
+        try {
+            if (userType === 'judge') {
+                const judgesSnapshot = await sessionDoc.ref.collection('judges').get();
+                return judgesSnapshot.docs.some(judgeDoc => 
+                    judgeDoc.data().name === username
+                );
+            }
+            
+            if (userType === 'speaker') {
+                const speakersSnapshot = await sessionDoc.ref.collection('speakers').get();
+                return speakersSnapshot.docs.some(speakerDoc => 
+                    speakerDoc.data().name === username
+                );
+            }
+            
+            return false;
+        } catch (error) {
+            console.error('检查用户会话失败:', error);
+            return false;
+        }
+    }
+
+    // 加载完整会话数据
+    async loadCompleteSessionData(sessionDoc, sessionData) {
+        try {
+            // 加载judges数据
+            const judgesSnapshot = await sessionDoc.ref.collection('judges').get();
+            const judges = [];
+            judgesSnapshot.forEach(doc => {
+                const judgeData = doc.data();
+                judges.push({
+                    id: judgeData.judgeId,
+                    name: judgeData.name,
+                    role: judgeData.role
+                });
+            });
+            
+            // 加载speakers数据
+            const speakersSnapshot = await sessionDoc.ref.collection('speakers').get();
+            const speakers = [];
+            speakersSnapshot.forEach(doc => {
+                const speakerData = doc.data();
+                speakers.push({
+                    id: speakerData.speakerId,
+                    name: speakerData.name,
+                    role: speakerData.role
+                });
+            });
+            
+            // 加载scores数据
+            const scoresSnapshot = await sessionDoc.ref.collection('scores').get();
+            const scores = {};
+            scoresSnapshot.forEach(doc => {
+                const scoreData = doc.data();
+                if (!scores[scoreData.speakerId]) {
+                    scores[scoreData.speakerId] = {};
+                }
+                scores[scoreData.speakerId][scoreData.judgeId] = scoreData.score;
+            });
+            
+            // 更新本地数据
+            this.judges = judges;
+            this.speakers = speakers;
+            this.users = [...judges, ...speakers];
+            this.scores = scores;
+            this.scoringMethod = sessionData.scoringMethod || 'trimmed';
+            this.scoringStarted = sessionData.status === 'scoring';
+            
+            // 更新界面
+            this.updateSessionDisplay();
+            this.updateAdminInterface();
+            
+        } catch (error) {
+            console.error('加载完整会话数据失败:', error);
         }
     }
 
     handleLogout() {
+        // 清理Firebase监听器
+        this.cleanupListeners();
+        
         this.currentUser = null;
         this.updateUserInfo();
         this.showSection('loginSection');
