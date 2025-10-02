@@ -698,7 +698,7 @@ class SpeechScoringSystem {
         }
     }
 
-    handleUserLogin() {
+    async handleUserLogin() {
         const username = document.getElementById('userNameInput').value.trim();
         const userType = document.getElementById('userTypeInput').value;
 
@@ -709,39 +709,159 @@ class SpeechScoringSystem {
             return;
         }
 
-        // 验证用户是否存在且角色匹配
-        const user = this.users.find(u => u.name === username);
-        if (!user) {
-            alert('用户不存在，请联系管理员添加');
+        // 显示加载状态
+        const loginBtn = document.getElementById('userLoginSubmit');
+        const originalText = loginBtn.textContent;
+        loginBtn.textContent = '正在验证...';
+        loginBtn.disabled = true;
+
+        try {
+            // 首先尝试从Firebase加载会话数据
+            await this.loadSessionFromFirebase(username, userType);
+            
+            // 验证用户是否存在且角色匹配
+            const user = this.users.find(u => u.name === username);
+            if (!user) {
+                alert('用户不存在，请联系管理员添加');
+                return;
+            }
+
+            if (userType === 'judge' && user.role !== 'judge') {
+                alert('您不是评委，无法以评委身份登录');
+                return;
+            }
+
+            if (userType === 'speaker' && user.role !== 'speaker') {
+                alert('您不是演讲者，无法以演讲者身份登录');
+                return;
+            }
+
+            this.currentUser = { name: username, type: userType };
+            this.updateUserInfo();
+
+            switch (userType) {
+                case 'judge':
+                    this.showSection('judgeSection');
+                    this.updateJudgeInterface();
+                    break;
+                case 'speaker':
+                    this.showSection('speakerSection');
+                    this.updateSpeakerInterface();
+                    break;
+            }
+
+            this.saveToLocalStorage();
+            console.log('用户登录成功');
+        } catch (error) {
+            console.error('登录失败:', error);
+            alert('登录失败，请稍后重试');
+        } finally {
+            // 恢复按钮状态
+            loginBtn.textContent = originalText;
+            loginBtn.disabled = false;
+        }
+    }
+
+    // 新增：从Firebase加载会话数据
+    async loadSessionFromFirebase(username, userType) {
+        if (!firebaseInitialized || !db) {
+            console.log('Firebase未初始化，使用本地数据');
             return;
         }
 
-        if (userType === 'judge' && user.role !== 'judge') {
-            alert('您不是评委，无法以评委身份登录');
-            return;
+        try {
+            console.log('正在从Firebase加载会话数据...');
+            
+            // 查找包含该用户的会话
+            const sessionsRef = db.collection('sessions');
+            const snapshot = await sessionsRef.get();
+            
+            let foundSession = null;
+            let sessionData = null;
+
+            for (const doc of snapshot.docs) {
+                const data = doc.data();
+                
+                // 检查judges集合
+                if (userType === 'judge') {
+                    const judgesSnapshot = await doc.ref.collection('judges').get();
+                    const judgeFound = judgesSnapshot.docs.some(judgeDoc => 
+                        judgeDoc.data().name === username
+                    );
+                    if (judgeFound) {
+                        foundSession = doc;
+                        sessionData = data;
+                        break;
+                    }
+                }
+                
+                // 检查speakers集合
+                if (userType === 'speaker') {
+                    const speakersSnapshot = await doc.ref.collection('speakers').get();
+                    const speakerFound = speakersSnapshot.docs.some(speakerDoc => 
+                        speakerDoc.data().name === username
+                    );
+                    if (speakerFound) {
+                        foundSession = doc;
+                        sessionData = data;
+                        break;
+                    }
+                }
+            }
+
+            if (foundSession && sessionData) {
+                console.log('找到用户会话，正在加载数据...');
+                
+                // 更新会话ID
+                this.sessionId = sessionData.sessionId;
+                
+                // 加载judges数据
+                const judgesSnapshot = await foundSession.ref.collection('judges').get();
+                const judges = [];
+                judgesSnapshot.forEach(doc => {
+                    const judgeData = doc.data();
+                    judges.push({
+                        id: judgeData.judgeId,
+                        name: judgeData.name,
+                        role: judgeData.role
+                    });
+                });
+                
+                // 加载speakers数据
+                const speakersSnapshot = await foundSession.ref.collection('speakers').get();
+                const speakers = [];
+                speakersSnapshot.forEach(doc => {
+                    const speakerData = doc.data();
+                    speakers.push({
+                        id: speakerData.speakerId,
+                        name: speakerData.name,
+                        role: speakerData.role
+                    });
+                });
+                
+                // 更新本地数据
+                this.judges = judges;
+                this.speakers = speakers;
+                this.users = [...judges, ...speakers];
+                this.scoringMethod = sessionData.scoringMethod || 'trimmed';
+                this.scoringStarted = sessionData.status === 'scoring';
+                
+                // 更新界面
+                this.updateSessionDisplay();
+                this.updateAdminInterface();
+                
+                console.log('会话数据加载完成:', {
+                    sessionId: this.sessionId,
+                    judges: judges.length,
+                    speakers: speakers.length,
+                    scoringStarted: this.scoringStarted
+                });
+            } else {
+                console.log('未找到用户对应的会话');
+            }
+        } catch (error) {
+            console.error('从Firebase加载会话数据失败:', error);
         }
-
-        if (userType === 'speaker' && user.role !== 'speaker') {
-            alert('您不是演讲者，无法以演讲者身份登录');
-            return;
-        }
-
-        this.currentUser = { name: username, type: userType };
-        this.updateUserInfo();
-
-        switch (userType) {
-            case 'judge':
-                this.showSection('judgeSection');
-                this.updateJudgeInterface();
-                break;
-            case 'speaker':
-                this.showSection('speakerSection');
-                this.updateSpeakerInterface();
-                break;
-        }
-
-        this.saveToLocalStorage();
-        console.log('用户登录成功');
     }
 
     handleLogout() {
