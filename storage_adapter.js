@@ -20,31 +20,36 @@ class StorageAdapter {
         controlPanel.id = 'storage-control-panel';
         controlPanel.innerHTML = `
             <div class="storage-controls">
-                <h4>📁 数据存储管理</h4>
-                <div class="storage-mode-selector">
-                    <label>存储模式：</label>
-                    <select id="storage-mode-select">
-                        <option value="memory">内存存储</option>
-                        <option value="local">本地存储</option>
-                        <option value="cloud" selected>云端存储</option>
-                    </select>
+                <div class="storage-header" id="storage-header">
+                    <h4>📁 数据存储管理</h4>
+                    <button class="toggle-btn" id="toggle-storage-btn">▼</button>
                 </div>
-                
-                <div class="storage-actions">
-                    <button id="clear-data-btn" class="btn-clear">🗑️ 清空数据</button>
-                </div>
-                
-                <div class="storage-mode-info">
-                    <h5>存储模式说明：</h5>
-                    <ul style="font-size: 10px; margin: 5px 0; padding-left: 15px;">
-                        <li><strong>内存存储（推荐）</strong>：数据仅保存在浏览器内存中，刷新页面后数据会丢失，适合临时测试</li>
-                        <li><strong>本地存储</strong>：数据保存在浏览器本地存储中，刷新页面后数据仍然保留，适合单机使用</li>
-                        <li><strong>云端存储</strong>：数据保存在云端服务器，可以跨设备访问，适合多人协作</li>
-                    </ul>
-                </div>
-                
-                <div class="storage-stats" id="storage-stats">
-                    <small>数据统计：加载中...</small>
+                <div class="storage-content" id="storage-content">
+                    <div class="storage-mode-selector">
+                        <label>存储模式：</label>
+                        <select id="storage-mode-select">
+                            <option value="memory">内存存储</option>
+                            <option value="local">本地存储</option>
+                            <option value="cloud" selected>云端存储</option>
+                        </select>
+                    </div>
+                    
+                    <div class="storage-actions">
+                        <button id="clear-data-btn" class="btn-clear">🗑️ 清空数据</button>
+                    </div>
+                    
+                    <div class="storage-mode-info">
+                        <h5>存储模式说明：</h5>
+                        <ul style="font-size: 10px; margin: 5px 0; padding-left: 15px;">
+                            <li><strong>内存存储</strong>：数据仅保存在浏览器内存中，刷新页面后数据会丢失，适合临时测试</li>
+                            <li><strong>本地存储</strong>：数据保存在浏览器本地存储中，刷新页面后数据仍然保留，适合单机使用</li>
+                            <li><strong>云端存储</strong>：数据保存在云端服务器，可以跨设备访问，适合多人协作</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="storage-stats" id="storage-stats">
+                        <small>数据统计：加载中...</small>
+                    </div>
                 </div>
             </div>
         `;
@@ -59,16 +64,61 @@ class StorageAdapter {
                 background: rgba(255, 255, 255, 0.95);
                 border: 1px solid #ddd;
                 border-radius: 8px;
-                padding: 15px;
+                padding: 10px;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                 z-index: 1000;
                 font-size: 12px;
                 max-width: 300px;
+                transition: all 0.3s ease;
+            }
+            
+            #storage-control-panel.collapsed {
+                max-width: 180px;
+            }
+            
+            .storage-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                user-select: none;
+                margin-bottom: 10px;
+            }
+            
+            .storage-header:hover {
+                opacity: 0.8;
             }
             
             .storage-controls h4 {
-                margin: 0 0 10px 0;
+                margin: 0;
                 color: #333;
+                font-size: 13px;
+            }
+            
+            .toggle-btn {
+                background: none;
+                border: none;
+                font-size: 12px;
+                cursor: pointer;
+                padding: 2px 5px;
+                color: #666;
+                transition: transform 0.3s ease;
+            }
+            
+            .toggle-btn.collapsed {
+                transform: rotate(-90deg);
+            }
+            
+            .storage-content {
+                max-height: 500px;
+                overflow: hidden;
+                transition: max-height 0.3s ease, opacity 0.3s ease;
+                opacity: 1;
+            }
+            
+            .storage-content.collapsed {
+                max-height: 0;
+                opacity: 0;
             }
             
             .storage-mode-selector {
@@ -135,11 +185,42 @@ class StorageAdapter {
         document.head.appendChild(style);
         document.body.appendChild(controlPanel);
 
+        // 绑定折叠事件
+        this.bindToggleEvent();
+
         // 绑定事件
         this.bindStorageEvents();
 
         // 更新统计信息
         this.updateStorageStats();
+    }
+
+    // 绑定折叠事件
+    bindToggleEvent() {
+        const header = document.getElementById('storage-header');
+        const toggleBtn = document.getElementById('toggle-storage-btn');
+        const content = document.getElementById('storage-content');
+        const panel = document.getElementById('storage-control-panel');
+
+        if (header && toggleBtn && content && panel) {
+            header.addEventListener('click', () => {
+                const isCollapsed = content.classList.contains('collapsed');
+
+                if (isCollapsed) {
+                    // 展开
+                    content.classList.remove('collapsed');
+                    toggleBtn.classList.remove('collapsed');
+                    panel.classList.remove('collapsed');
+                    toggleBtn.textContent = '▼';
+                } else {
+                    // 折叠
+                    content.classList.add('collapsed');
+                    toggleBtn.classList.add('collapsed');
+                    panel.classList.add('collapsed');
+                    toggleBtn.textContent = '▶';
+                }
+            });
+        }
     }
 
     // 绑定存储控制事件
