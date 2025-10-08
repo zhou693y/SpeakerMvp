@@ -14,6 +14,12 @@ class SpeechScoringSystem {
         this.currentUser = null;
         this.classes = [];
         this.currentClass = null;
+
+        // 轮询相关配置
+        this.pollingInterval = null;
+        this.pollingFrequency = 3000; // 3秒轮询一次
+        this.lastSyncTime = 0;
+        this.isPolling = false;
     }
 
     generateSessionId() {
@@ -113,9 +119,140 @@ class SpeechScoringSystem {
         } catch (_) { }
     }
 
-    // 云端功能已移除，系统现在仅使用本地存储
+    // 启动轮询同步
+    startPolling() {
+        if (this.isPolling) {
+            console.log('轮询已在运行中');
+            return;
+        }
 
-    // 云端保存和加载功能已移除，系统现在仅使用本地存储
+        this.isPolling = true;
+        console.log(`开始轮询同步，频率: ${this.pollingFrequency}ms`);
+
+        // 立即执行一次同步
+        this.syncFromCloud();
+
+        // 设置定时轮询
+        this.pollingInterval = setInterval(() => {
+            this.syncFromCloud();
+        }, this.pollingFrequency);
+    }
+
+    // 停止轮询
+    stopPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+            this.isPolling = false;
+            console.log('轮询已停止');
+        }
+    }
+
+    // 从云端同步数据
+    async syncFromCloud() {
+        try {
+            if (!this.sessionId || !this.currentClassId) {
+                return;
+            }
+
+            // 使用 LeanCloud 查询数据（不使用实时订阅）
+            const query = new AV.Query('SpeechSession');
+            query.equalTo('sessionId', this.sessionId);
+            query.equalTo('classId', this.currentClassId);
+            query.descending('updatedAt');
+            query.limit(1);
+
+            const result = await query.first();
+
+            if (result) {
+                const cloudData = {
+                    users: result.get('users') || [],
+                    speakers: result.get('speakers') || [],
+                    judges: result.get('judges') || [],
+                    scores: result.get('scores') || {},
+                    scoringStarted: result.get('scoringStarted') || false,
+                    scoringMethod: result.get('scoringMethod') || 'trimmed',
+                    settings: result.get('settings') || this.settings,
+                    updatedAt: result.updatedAt.getTime()
+                };
+
+                // 只有当云端数据更新时间晚于本地时才更新
+                if (cloudData.updatedAt > this.lastSyncTime) {
+                    this.users = cloudData.users;
+                    this.speakers = cloudData.speakers;
+                    this.judges = cloudData.judges;
+                    this.scores = cloudData.scores;
+                    this.scoringStarted = cloudData.scoringStarted;
+                    this.scoringMethod = cloudData.scoringMethod;
+                    this.settings = cloudData.settings;
+                    this.lastSyncTime = cloudData.updatedAt;
+
+                    // 更新界面
+                    this.updateAllInterfaces();
+
+                    console.log('数据已从云端同步');
+                }
+            }
+        } catch (error) {
+            console.warn('云端同步失败:', error.message);
+            // 同步失败不影响本地使用
+        }
+    }
+
+    // 保存到云端（使用普通保存，不使用实时订阅）
+    async saveToCloud() {
+        try {
+            if (!this.sessionId || !this.currentClassId) {
+                console.log('会话ID或班级ID未设置，跳过云端保存');
+                return;
+            }
+
+            // 查找现有记录
+            const query = new AV.Query('SpeechSession');
+            query.equalTo('sessionId', this.sessionId);
+            query.equalTo('classId', this.currentClassId);
+
+            let sessionObj = await query.first();
+
+            if (!sessionObj) {
+                // 创建新记录
+                sessionObj = new AV.Object('SpeechSession');
+                sessionObj.set('sessionId', this.sessionId);
+                sessionObj.set('classId', this.currentClassId);
+            }
+
+            // 更新数据
+            sessionObj.set('users', this.users);
+            sessionObj.set('speakers', this.speakers);
+            sessionObj.set('judges', this.judges);
+            sessionObj.set('scores', this.scores);
+            sessionObj.set('scoringStarted', this.scoringStarted);
+            sessionObj.set('scoringMethod', this.scoringMethod);
+            sessionObj.set('settings', this.settings);
+
+            await sessionObj.save();
+            this.lastSyncTime = Date.now();
+
+            console.log('数据已保存到云端');
+        } catch (error) {
+            console.error('云端保存失败:', error.message);
+            this.showNetworkError('云端保存失败，数据仅保存在本地');
+        }
+    }
+
+    // 更新所有界面
+    updateAllInterfaces() {
+        // 根据当前用户角色更新相应界面
+        if (this.currentUser) {
+            if (this.currentUser.role === 'admin') {
+                this.updateAdminInterface();
+            } else if (this.currentUser.role === 'judge') {
+                this.updateJudgeInterface();
+            } else if (this.currentUser.role === 'speaker') {
+                this.updateSpeakerInterface();
+            }
+        }
+    }
 
     processBatchAdd(names) {
         try {
@@ -735,14 +872,17 @@ class SpeechScoringSystem {
 
     // 初始化固定班级
     initializeFixedClasses() {
+        // 使用 fixed_classes_data.js 中的真实学生名单
+        const fixedClassesData = window.FIXED_CLASS_STUDENTS || {};
+
         const fixedClasses = [
             {
                 id: "fixed_youhao101",
                 name: "友好101",
                 createdAt: "2024-01-01T00:00:00.000Z",
                 isFixed: true,
-                students: Array.from({ length: 37 }, (_, i) => `学生${String(i + 1).padStart(2, '0')}`),
-                studentCount: 37,
+                students: fixedClassesData["友好101"] || [],
+                studentCount: (fixedClassesData["友好101"] || []).length,
                 sessions: []
             },
             {
@@ -750,8 +890,8 @@ class SpeechScoringSystem {
                 name: "友好102",
                 createdAt: "2024-01-01T00:00:00.000Z",
                 isFixed: true,
-                students: Array.from({ length: 40 }, (_, i) => `学生${String(i + 1).padStart(2, '0')}`),
-                studentCount: 40,
+                students: fixedClassesData["友好102"] || [],
+                studentCount: (fixedClassesData["友好102"] || []).length,
                 sessions: []
             },
             {
@@ -759,8 +899,8 @@ class SpeechScoringSystem {
                 name: "友好103",
                 createdAt: "2024-01-01T00:00:00.000Z",
                 isFixed: true,
-                students: Array.from({ length: 27 }, (_, i) => `学生${String(i + 1).padStart(2, '0')}`),
-                studentCount: 27,
+                students: fixedClassesData["友好103"] || [],
+                studentCount: (fixedClassesData["友好103"] || []).length,
                 sessions: []
             }
         ];
@@ -770,14 +910,13 @@ class SpeechScoringSystem {
             const existingClass = this.classes.find(cls => cls.id === fixedClass.id);
             if (!existingClass) {
                 this.classes.unshift(fixedClass); // 添加到数组开头
-                console.log(`已添加固定班级: ${fixedClass.name}`);
+                console.log(`已添加固定班级: ${fixedClass.name}，学生数: ${fixedClass.studentCount}`);
             } else {
                 // 确保现有的固定班级有正确的标记和学生数据
                 existingClass.isFixed = true;
-                if (!existingClass.students) {
-                    existingClass.students = fixedClass.students;
-                    existingClass.studentCount = fixedClass.studentCount;
-                }
+                existingClass.students = fixedClass.students;
+                existingClass.studentCount = fixedClass.studentCount;
+                console.log(`已更新固定班级: ${fixedClass.name}，学生数: ${fixedClass.studentCount}`);
             }
         });
 
