@@ -14,6 +14,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <script>
+        // LeanCloud 配置（仅用于轮询，不做自检）
         window.LC_CONFIG = {
             appId: 'qfHm1teoFkyfdBwcDUPrxX9t-gzGzoHsz',
             appKey: 'Qa82V9E5VdUpcejq5CJGfW5k',
@@ -30,13 +31,11 @@
         window.addEventListener('online', function () {
             window.networkStatus.isOnline = true;
             window.networkStatus.lastCheck = Date.now();
-            console.log('网络已连接');
         });
 
         window.addEventListener('offline', function () {
             window.networkStatus.isOnline = false;
             window.networkStatus.lastCheck = Date.now();
-            console.log('网络已断开');
         });
     </script>
 </head>
@@ -305,10 +304,12 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
+    <script src="fixed_classes_data.js"></script>
     <script src="memory_storage.js"></script>
     <script src="storage_adapter.js"></script>
     <script src="cloud_polling.js"></script>
-    <script src="fixed_classes_data.js"></script>
+    <script src="init_fix.js"></script>
     <script src="script.js"></script>
     <script src="system_integration.js"></script>
 </body>

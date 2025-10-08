@@ -18,22 +18,10 @@ class CloudPollingSync {
         this.initLeanCloud();
     }
 
-    // 初始化 LeanCloud
+    // 初始化 LeanCloud（延迟初始化，避免重复）
     initLeanCloud() {
-        try {
-            if (window.LC_CONFIG && window.AV) {
-                AV.init({
-                    appId: window.LC_CONFIG.appId,
-                    appKey: window.LC_CONFIG.appKey,
-                    serverURL: window.LC_CONFIG.serverURL
-                });
-                console.log('LeanCloud 初始化成功（轮询模式）');
-            } else {
-                console.warn('LeanCloud 配置未找到');
-            }
-        } catch (error) {
-            console.error('LeanCloud 初始化失败:', error);
-        }
+        // 不在这里初始化，由 init_fix.js 统一处理
+        console.log('云端轮询模块就绪');
     }
 
     // 设置会话信息
