@@ -1,5 +1,22 @@
 /* 手机端专用修复样式 */
+
+/* 防止横向滚动 - 全局设置 */
+html,
+body {
+    overflow-x: hidden !important;
+    width: 100%;
+    max-width: 100vw;
+}
+
 @media (max-width: 768px) {
+
+    /* 确保所有元素不超出屏幕 */
+    body,
+    .container,
+    .section {
+        overflow-x: hidden !important;
+        max-width: 100vw;
+    }
 
     /* 表格横向滚动容器 */
     .table-scroll-container {
