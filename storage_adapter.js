@@ -9,8 +9,8 @@ class StorageAdapter {
         this.memoryStorage = window.memoryStorage;
         this.cloudEnabled = false;
 
-        // 初始化UI控制
-        this.initStorageControls();
+        // 初始化UI控制 - 已禁用，系统固定使用云端存储
+        // this.initStorageControls();
     }
 
     // 初始化存储控制UI
