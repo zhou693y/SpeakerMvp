@@ -1,0 +1,80 @@
+/* 手机端专用修复样式 */
+@media (max-width: 768px) {
+
+    /* 表格横向滚动容器 */
+    .table-scroll-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin: 10px 0;
+    }
+
+    .table-scroll-container table {
+        min-width: 600px;
+        margin: 0;
+        font-size: 12px;
+    }
+
+    .table-scroll-container th,
+    .table-scroll-container td {
+        padding: 8px 6px;
+        white-space: nowrap;
+    }
+
+    /* 滚动提示 */
+    .scroll-hint {
+        text-align: center;
+        color: #718096;
+        font-size: 11px;
+        padding: 5px;
+        background: #f7fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    /* 优化按钮布局 */
+    .results-controls,
+    .scoring-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .results-controls .btn,
+    .scoring-buttons .btn {
+        width: 100%;
+        margin: 0;
+    }
+
+    /* 评分进度表格优化 */
+    .progress-table {
+        font-size: 11px;
+    }
+
+    .progress-table th,
+    .progress-table td {
+        padding: 6px 4px;
+    }
+
+    /* 评分结果表格优化 */
+    .results-table {
+        font-size: 12px;
+    }
+
+    .results-table th,
+    .results-table td {
+        padding: 8px 6px;
+    }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 480px) {
+    .table-scroll-container table {
+        font-size: 11px;
+    }
+
+    .table-scroll-container th,
+    .table-scroll-container td {
+        padding: 6px 4px;
+    }
+}

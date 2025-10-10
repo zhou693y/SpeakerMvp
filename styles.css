@@ -2379,3 +2379,223 @@ h1 {
         opacity: 0.7;
     }
 }
+
+
+/* ========================================
+   手机端优化样式（针对评分结果和进度表格）
+   ======================================== */
+
+@media (max-width: 768px) {
+
+    /* 容器优化 */
+    .container {
+        padding: 10px;
+    }
+
+    .section {
+        padding: 15px;
+    }
+
+    /* 标题优化 */
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    h2 {
+        font-size: 1.3rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    h4 {
+        font-size: 1rem;
+    }
+
+    /* 表格容器 - 添加横向滚动 */
+    .progress-details,
+    .results-display,
+    #resultsDisplay {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -15px;
+        padding: 0 15px;
+    }
+
+    /* 表格优化 */
+    .progress-table,
+    table {
+        min-width: 600px;
+        font-size: 12px;
+    }
+
+    .progress-table th,
+    .progress-table td,
+    table th,
+    table td {
+        padding: 8px 4px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    /* 评分进度表格 */
+    .progress-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    /* 评分结果表格 */
+    .results-display table {
+        display: block;
+        overflow-x: auto;
+    }
+
+    /* 进度条优化 */
+    .progress-bar {
+        height: 25px;
+    }
+
+    /* 按钮优化 */
+    .results-controls,
+    .scoring-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .results-controls .btn,
+    .scoring-buttons .btn {
+        width: 100%;
+        margin: 0;
+    }
+
+    /* 评分卡片优化 */
+    .speaker-card {
+        padding: 15px;
+    }
+
+    .score-item {
+        margin-bottom: 12px;
+    }
+
+    .score-item label {
+        font-size: 13px;
+        margin-bottom: 5px;
+    }
+
+    .score-item input {
+        font-size: 14px;
+        padding: 8px;
+    }
+
+    /* 数据存储管理面板优化 */
+    #storage-control-panel {
+        position: fixed;
+        top: 5px;
+        left: 5px;
+        max-width: 90%;
+        font-size: 11px;
+        padding: 10px;
+    }
+
+    /* 提示信息优化 */
+    .toast {
+        max-width: 90%;
+        font-size: 12px;
+        padding: 10px 15px;
+    }
+
+    /* 评分统计信息优化 */
+    .progress-summary p {
+        font-size: 14px;
+    }
+
+    /* 完成提示优化 */
+    .all-completed-notice p {
+        font-size: 14px;
+    }
+
+    /* 表格滚动提示 */
+    .progress-details::after,
+    .results-display::after {
+        content: '← 左右滑动查看更多 →';
+        display: block;
+        text-align: center;
+        color: #999;
+        font-size: 11px;
+        margin-top: 5px;
+        padding: 5px;
+    }
+}
+
+/* 小屏幕手机优化（宽度 < 480px） */
+@media (max-width: 480px) {
+
+    /* 更小的字体 */
+    body {
+        font-size: 14px;
+    }
+
+    h1 {
+        font-size: 1.3rem;
+    }
+
+    h2 {
+        font-size: 1.1rem;
+    }
+
+    /* 更紧凑的间距 */
+    .container {
+        padding: 5px;
+    }
+
+    .section {
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    /* 表格更小的字体 */
+    .progress-table,
+    table {
+        font-size: 10px;
+        min-width: 500px;
+    }
+
+    .progress-table th,
+    .progress-table td,
+    table th,
+    table td {
+        padding: 6px 3px;
+        font-size: 10px;
+    }
+
+    /* 按钮优化 */
+    .btn {
+        padding: 8px 15px;
+        font-size: 13px;
+    }
+
+    /* 输入框优化 */
+    input,
+    select {
+        font-size: 14px;
+        padding: 8px;
+    }
+}
+
+/* 横屏模式优化 */
+@media (max-width: 768px) and (orientation: landscape) {
+
+    /* 横屏时表格可以显示更多内容 */
+    .progress-table,
+    table {
+        min-width: auto;
+        font-size: 11px;
+    }
+
+    .section {
+        padding: 15px;
+    }
+}
