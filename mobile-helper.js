@@ -30,12 +30,17 @@ class MobileOptimizer {
     }
 
     wrapTableWithScroll(table) {
+        // 检查是否已经被包装过
+        if (table.parentNode.classList.contains('table-scroll-container')) {
+            return;
+        }
+
         const wrapper = document.createElement('div');
         wrapper.className = 'table-scroll-container';
 
         const hint = document.createElement('div');
         hint.className = 'scroll-hint';
-        hint.textContent = '← 左右滑动查看更多内容 →';
+        hint.textContent = '← 左右滑动查看更多 →';
 
         table.parentNode.insertBefore(wrapper, table);
         wrapper.appendChild(table);

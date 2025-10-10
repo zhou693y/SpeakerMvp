@@ -252,6 +252,30 @@ h1 {
     margin: 10px 0;
 }
 
+/* 移动端表格滚动容器样式 */
+.table-scroll-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 15px 0;
+    position: relative;
+}
+
+.table-scroll-container table {
+    margin: 0 auto;
+    display: table;
+}
+
+.scroll-hint {
+    text-align: center;
+    color: #718096;
+    font-size: 12px;
+    padding: 8px 0;
+    margin-top: 5px;
+    background: #f7fafc;
+    border-radius: 4px;
+}
+
 @media (max-width: 768px) {
     body {
         overflow-x: hidden;
